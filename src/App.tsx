@@ -3,7 +3,6 @@ import { useAuth } from './contexts/AuthContext';
 import LoginPage from './components/LoginPage';
 import RemindersPage from './components/RemindersPage';
 import ConfirmationModal from './components/ConfirmationModal';
-import { LogIn } from 'lucide-react';
 
 // Componente que lida com a lógica principal da aplicação
 const AppContent: React.FC = () => {
