@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import type { ReactNode } from 'react';
 import type { SavedItem, SavedItemsData } from '../types';
-import { doc, setDoc, getDoc, type Timestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useAuth } from './AuthContext';
 import { db } from '../lib/firebase';
 
