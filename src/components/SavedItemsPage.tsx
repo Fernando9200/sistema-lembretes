@@ -4,11 +4,14 @@ import { useSavedItems } from '../contexts/SavedItemsContext';
 import type { SavedItem } from '../types';
 import { 
   Plus, Trash2, Edit, Save, X, Star, ExternalLink, 
-  FileText, Link as LinkIcon, Search, Calendar
+  FileText, Link as LinkIcon, Search, Calendar, Upload,
+  Download, Eye
 } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
 import AutoSizingTextarea from './AutoSizingTextarea';
 import UserProfile from './UserProfile';
+import FileUpload from './FileUpload';
+import { useCloudinaryUpload } from '../hooks/useCloudinaryUpload';
 
 // Card de Item Salvo
 interface SavedItemCardProps {
@@ -31,7 +34,7 @@ const SavedItemCard: React.FC<SavedItemCardProps> = ({ item, onToggleFavorite, o
       ...item, 
       title: editState.title.trim(), 
       content: editState.content.trim(),
-      url: item.type === 'link' ? editState.url.trim() : undefined
+      url: item.type === 'link' ? editState.url.trim() : item.url // Mantém URL original para arquivos
     });
     setIsEditing(false);
   };
@@ -42,6 +45,52 @@ const SavedItemCard: React.FC<SavedItemCardProps> = ({ item, onToggleFavorite, o
     }
   };
 
+  const handleOpenFile = () => {
+    if (item.type === 'file' && item.fileData) {
+      window.open(item.fileData.url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) return '🖼️';
+    if (fileType.startsWith('video/')) return '🎥';
+    if (fileType.includes('pdf')) return '📄';
+    if (fileType.includes('word') || fileType.includes('document')) return '📝';
+    if (fileType.includes('sheet') || fileType.includes('excel')) return '📊';
+    if (fileType.includes('presentation') || fileType.includes('powerpoint')) return '📽️';
+    return '📎';
+  };
+
+  const getTypeIcon = () => {
+    switch (item.type) {
+      case 'link':
+        return <LinkIcon className="w-4 h-4 text-blue-600" />;
+      case 'file':
+        return <Upload className="w-4 h-4 text-purple-600" />;
+      default:
+        return <FileText className="w-4 h-4 text-green-600" />;
+    }
+  };
+
+  const getTypeColor = () => {
+    switch (item.type) {
+      case 'link':
+        return 'bg-blue-100';
+      case 'file':
+        return 'bg-purple-100';
+      default:
+        return 'bg-green-100';
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg">
       <div className="p-5 border-l-4 border-primary-500">
@@ -49,15 +98,9 @@ const SavedItemCard: React.FC<SavedItemCardProps> = ({ item, onToggleFavorite, o
           {/* Tipo, Título e Metadata */}
           <div className="flex items-start space-x-3 flex-1 min-w-0">
             <div className="mt-1 flex-shrink-0">
-              {item.type === 'link' ? (
-                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <LinkIcon className="w-4 h-4 text-blue-600" />
-                </div>
-              ) : (
-                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-4 h-4 text-green-600" />
-                </div>
-              )}
+              <div className={`w-8 h-8 ${getTypeColor()} rounded-lg flex items-center justify-center`}>
+                {getTypeIcon()}
+              </div>
             </div>
             <div className="flex-1 min-w-0">
               {isEditing ? (
@@ -78,6 +121,25 @@ const SavedItemCard: React.FC<SavedItemCardProps> = ({ item, onToggleFavorite, o
                     >
                       <ExternalLink className="w-4 h-4" />
                     </button>
+                  )}
+                  {item.type === 'file' && item.fileData && (
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={handleOpenFile}
+                        className="text-purple-500 hover:text-purple-700 transition-colors"
+                        title="Visualizar arquivo"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      <a 
+                        href={item.fileData.url}
+                        download={item.fileData.fileName}
+                        className="text-purple-500 hover:text-purple-700 transition-colors"
+                        title="Baixar arquivo"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                    </div>
                   )}
                 </div>
               )}
@@ -151,6 +213,18 @@ const SavedItemCard: React.FC<SavedItemCardProps> = ({ item, onToggleFavorite, o
           </div>
         )}
 
+        {/* Informações do arquivo (apenas para arquivos) */}
+        {item.type === 'file' && item.fileData && (
+          <div className="pl-11 mt-2">
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <span className="text-lg">{getFileIcon(item.fileData.fileType)}</span>
+              <span className="font-medium">{item.fileData.fileName}</span>
+              <span>•</span>
+              <span>{formatFileSize(item.fileData.fileSize)}</span>
+            </div>
+          </div>
+        )}
+
         {/* Conteúdo */}
         <div className="pl-11 mt-3">
           {isEditing ? (
@@ -174,12 +248,14 @@ const SavedItemCard: React.FC<SavedItemCardProps> = ({ item, onToggleFavorite, o
 // Página Principal
 const SavedItemsPage: React.FC = () => {
   const { state, dispatch, isSaving } = useSavedItems();
+  const { uploadFile, uploading: cloudinaryUploading, error: uploadError } = useCloudinaryUpload();
   const [newItem, setNewItem] = useState({ 
     title: '', 
     content: '', 
-    type: 'text' as 'text' | 'link', 
+    type: 'text' as 'text' | 'link' | 'file', 
     url: ''
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [modalState, setModalState] = useState<{isOpen: boolean; id: string | null; title: string}>({ 
     isOpen: false, 
@@ -187,7 +263,7 @@ const SavedItemsPage: React.FC = () => {
     title: '' 
   });
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'text' | 'link' | 'favorites'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'text' | 'link' | 'file' | 'favorites'>('all');
 
   const items = useMemo(() => {
     let filtered = (state.data?.items || []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -195,36 +271,69 @@ const SavedItemsPage: React.FC = () => {
     // Filtro por tipo
     if (filterType === 'text') filtered = filtered.filter(item => item.type === 'text');
     if (filterType === 'link') filtered = filtered.filter(item => item.type === 'link');
+    if (filterType === 'file') filtered = filtered.filter(item => item.type === 'file');
     if (filterType === 'favorites') filtered = filtered.filter(item => item.isFavorite);
     
     // Filtro por busca
     if (searchTerm) {
       filtered = filtered.filter(item => 
         item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.content.toLowerCase().includes(searchTerm.toLowerCase())
+        item.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.fileData?.fileName.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
     
     return filtered;
   }, [state.data?.items, searchTerm, filterType]);
 
-  const handleAddItem = () => {
+  const handleAddItem = async () => {
     if (!newItem.title.trim()) return;
-    dispatch({ 
-      type: 'ADD_ITEM', 
-      payload: { 
+
+    try {
+      let fileData;
+      
+      if (newItem.type === 'file' && selectedFile) {
+        console.log('🔄 Iniciando upload do arquivo:', selectedFile.name);
+        const uploadResult = await uploadFile(selectedFile);
+        console.log('✅ Upload concluído:', uploadResult);
+        fileData = uploadResult;
+      }
+
+      const itemPayload = { 
         title: newItem.title.trim(), 
         content: newItem.content.trim(),
         type: newItem.type,
-        url: newItem.type === 'link' ? newItem.url.trim() : undefined
-      } 
-    });
-    setNewItem({ title: '', content: '', type: 'text', url: '' });
-    setIsAdding(false);
+        url: newItem.type === 'link' ? newItem.url.trim() : undefined,
+        fileData
+      };
+
+      console.log('🔄 Adicionando item:', itemPayload);
+
+      dispatch({ 
+        type: 'ADD_ITEM', 
+        payload: itemPayload
+      });
+      
+      setNewItem({ title: '', content: '', type: 'text', url: '' });
+      setSelectedFile(null);
+      setIsAdding(false);
+
+      console.log('✅ Item adicionado com sucesso');
+    } catch (error) {
+      console.error('❌ Erro ao adicionar item:', error);
+      alert(`Erro ao fazer upload do arquivo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    }
   };
 
-  const handleToggleFavorite = (id: string) => dispatch({ type: 'TOGGLE_FAVORITE', payload: { itemId: id } });
-  const handleUpdateItem = (item: SavedItem) => dispatch({ type: 'UPDATE_ITEM', payload: item });
+  const handleToggleFavorite = (id: string) => {
+    console.log('🔄 Toggleando favorito:', id);
+    dispatch({ type: 'TOGGLE_FAVORITE', payload: { itemId: id } });
+  };
+
+  const handleUpdateItem = (item: SavedItem) => {
+    console.log('🔄 Atualizando item:', item);
+    dispatch({ type: 'UPDATE_ITEM', payload: item });
+  };
   
   const handleRequestRemove = (id: string, title: string) => {
     setModalState({ isOpen: true, id, title });
@@ -232,15 +341,28 @@ const SavedItemsPage: React.FC = () => {
 
   const handleConfirmRemove = () => {
     if (modalState.id) {
+      console.log('🔄 Removendo item:', modalState.id);
       dispatch({ type: 'REMOVE_ITEM', payload: { itemId: modalState.id } });
     }
     setModalState({ isOpen: false, id: null, title: '' });
   };
 
+  const handleCancelAdd = () => {
+    setIsAdding(false);
+    setNewItem({ title: '', content: '', type: 'text', url: '' });
+    setSelectedFile(null);
+  };
+
+  // Debug: Log do estado atual
+  console.log('🔍 Estado atual da página:', { state, items: items.length });
+
   if (state.loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando itens salvos...</p>
+        </div>
       </div>
     );
   }
@@ -249,6 +371,7 @@ const SavedItemsPage: React.FC = () => {
     total: state.data?.items.length || 0,
     texts: state.data?.items.filter(item => item.type === 'text').length || 0,
     links: state.data?.items.filter(item => item.type === 'link').length || 0,
+    files: state.data?.items.filter(item => item.type === 'file').length || 0,
     favorites: state.data?.items.filter(item => item.isFavorite).length || 0
   };
 
@@ -258,7 +381,7 @@ const SavedItemsPage: React.FC = () => {
       <aside className="w-64 bg-white border-r border-gray-200 flex-col hidden sm:flex">
         <div className="p-6 border-b border-gray-200">
           <h1 className="font-semibold text-xl text-gray-900">Itens Salvos</h1>
-          <p className="text-sm text-gray-500">Textos e links organizados</p>
+          <p className="text-sm text-gray-500">Textos, links e arquivos</p>
         </div>
         
         <div className="flex-1 overflow-y-auto">
@@ -279,6 +402,10 @@ const SavedItemsPage: React.FC = () => {
                 <span className="font-bold text-blue-700 bg-blue-100 rounded-full px-2.5 py-0.5">{stats.links}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-700">Arquivos</span>
+                <span className="font-bold text-purple-700 bg-purple-100 rounded-full px-2.5 py-0.5">{stats.files}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-700">Favoritos</span>
                 <span className="font-bold text-yellow-700 bg-yellow-100 rounded-full px-2.5 py-0.5">{stats.favorites}</span>
               </div>
@@ -291,6 +418,7 @@ const SavedItemsPage: React.FC = () => {
                 { key: 'all', label: 'Todos', icon: FileText },
                 { key: 'text', label: 'Textos', icon: FileText },
                 { key: 'link', label: 'Links', icon: LinkIcon },
+                { key: 'file', label: 'Arquivos', icon: Upload },
                 { key: 'favorites', label: 'Favoritos', icon: Star }
               ].map(filter => (
                 <button
@@ -316,10 +444,19 @@ const SavedItemsPage: React.FC = () => {
       {/* Conteúdo Principal */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {/* Indicador de Salvamento */}
-        {isSaving && (
+        {(isSaving || cloudinaryUploading) && (
           <div className="fixed top-6 right-6 z-50 bg-primary-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 animate-fade-in">
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            <span className="font-medium text-sm">Salvando...</span>
+            <span className="font-medium text-sm">
+              {cloudinaryUploading ? 'Fazendo upload...' : 'Salvando...'}
+            </span>
+          </div>
+        )}
+
+        {/* Erro de upload */}
+        {uploadError && (
+          <div className="fixed top-6 right-6 z-50 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 animate-fade-in">
+            <span className="font-medium text-sm">Erro: {uploadError}</span>
           </div>
         )}
 
@@ -330,7 +467,7 @@ const SavedItemsPage: React.FC = () => {
               <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Buscar por título ou conteúdo..."
+                placeholder="Buscar por título, conteúdo ou nome do arquivo..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-400 focus:border-transparent"
@@ -371,6 +508,17 @@ const SavedItemsPage: React.FC = () => {
                     <LinkIcon className="w-4 h-4" />
                     <span>Link</span>
                   </button>
+                  <button
+                    onClick={() => setNewItem({...newItem, type: 'file'})}
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg border-2 transition-colors ${
+                      newItem.type === 'file' 
+                        ? 'border-purple-500 bg-purple-50 text-purple-700' 
+                        : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Arquivo</span>
+                  </button>
                 </div>
 
                 <input 
@@ -392,6 +540,15 @@ const SavedItemsPage: React.FC = () => {
                   />
                 )}
 
+                {newItem.type === 'file' && (
+                  <FileUpload
+                    onFileSelect={setSelectedFile}
+                    selectedFile={selectedFile}
+                    onClearFile={() => setSelectedFile(null)}
+                    uploading={cloudinaryUploading}
+                  />
+                )}
+
                 <AutoSizingTextarea 
                   placeholder="Conteúdo ou descrição..." 
                   value={newItem.content} 
@@ -401,17 +558,22 @@ const SavedItemsPage: React.FC = () => {
 
                 <div className="flex justify-end space-x-3">
                   <button 
-                    onClick={() => setIsAdding(false)} 
+                    onClick={handleCancelAdd} 
                     className="px-4 py-2 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300"
+                    disabled={cloudinaryUploading}
                   >
                     Cancelar
                   </button>
                   <button 
                     onClick={handleAddItem} 
-                    disabled={!newItem.title.trim()} 
-                    className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                    disabled={
+                      !newItem.title.trim() || 
+                      (newItem.type === 'file' && !selectedFile) || 
+                      cloudinaryUploading
+                    } 
+                    className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Adicionar
+                    {cloudinaryUploading ? 'Fazendo upload...' : 'Adicionar'}
                   </button>
                 </div>
               </div>
@@ -432,6 +594,7 @@ const SavedItemsPage: React.FC = () => {
               {filterType === 'all' && `Todos os Itens (${items.length})`}
               {filterType === 'text' && `Textos (${items.length})`}
               {filterType === 'link' && `Links (${items.length})`}
+              {filterType === 'file' && `Arquivos (${items.length})`}
               {filterType === 'favorites' && `Favoritos (${items.length})`}
             </h2>
             

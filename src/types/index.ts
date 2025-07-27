@@ -20,13 +20,21 @@ export interface RemindersData {
   lastUpdated: Date;
 }
 
-// Novos tipos para textos e links
+// Novos tipos para textos, links e arquivos
 export interface SavedItem {
   id: string;
   title: string;
   content: string;
-  type: 'text' | 'link';
-  url?: string; // Apenas para links
+  type: 'text' | 'link' | 'file';
+  url?: string; // Para links
+  fileData?: {
+    url: string;
+    publicId: string;
+    fileName: string;
+    fileSize: number;
+    fileType: string;
+    resourceType: 'image' | 'video' | 'raw'; // raw para PDFs e outros documentos
+  };
   createdAt: Date;
   lastModified: Date;
   isFavorite: boolean;
